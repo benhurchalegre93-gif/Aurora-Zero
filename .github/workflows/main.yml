@@ -1,0 +1,57 @@
+name: Compilar Aurora Zero para Windows
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Baixar código do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Compilar executável Windows
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name AuroraZero main.py
+
+      - name: Montar pasta final com assets
+        run: |
+          New-Item -ItemType Directory -Force -Path "dist/AuroraZero-Windows/assets"
+          Copy-Item "dist/AuroraZero.exe" "dist/AuroraZero-Windows/"
+          if (Test-Path "assets") {
+            Copy-Item -Path "assets/*" -Destination "dist/AuroraZero-Windows/assets/" -Recurse
+          } else {
+            Copy-Item -Path "*.png", "*.mp3" -Destination "dist/AuroraZero-Windows/assets/"
+          }
+          Copy-Item "README.md" "dist/AuroraZero-Windows/"
+
+      - name: Testar o executável no Windows
+        run: |
+          $arquivos = @("Enemy3.png", "Enemy3Shot.png", "Level3.mp3", "Level3Bg0.png", "Level3Bg1.png", "Level3Bg2.png", "Level3Bg3.png", "Level3Bg4.png")
+          foreach ($arq in $arquivos) {
+            if (-not (Test-Path "dist/AuroraZero-Windows/assets/$arq")) {
+              Write-Error "Arquivo faltando na pasta assets: $arq"
+              exit 1
+            }
+          }
+          $p = Start-Process -FilePath "dist/AuroraZero-Windows/AuroraZero.exe" -ArgumentList "--self-test" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { exit $p.ExitCode }
+
+      - name: Publicar ZIP pronto para entrega
+        uses: actions/upload-artifact@v4
+        with:
+          name: AuroraZero-Windows
+          path: dist/AuroraZero-Windows/
